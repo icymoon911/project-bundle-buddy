@@ -31,6 +31,7 @@ export enum ImportTypes {
   WEBPACK = "webpack",
   CRA = "create-react-app",
   ESBUILD = "esbuild",
+  VITE = "vite",
 }
 
 export interface ImportResolveState {
@@ -146,6 +147,33 @@ export interface EsBuildMetadata {
       bytes: number;
       imports: {
         path: string;
+      }[];
+    };
+  };
+  outputs: {
+    [path: string]: {
+      bytes: number;
+      inputs: {
+        [path: string]: {
+          bytesInOutput: number;
+        };
+      };
+    };
+  };
+}
+
+/**
+ * Vite build metadata (rollup output with Vite-specific metadata).
+ * Structurally similar to esbuild's metafile but produced by the
+ * rollup-plugin-visualizer or a custom Vite plugin.
+ */
+export interface ViteMetadata {
+  inputs: {
+    [path: string]: {
+      bytes: number;
+      imports: {
+        path: string;
+        kind?: string;
       }[];
     };
   };

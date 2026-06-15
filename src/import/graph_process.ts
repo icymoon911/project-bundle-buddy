@@ -8,8 +8,10 @@ const prefixStrips = [
   "commonjs-proxy:/",
   // Rollup specific prefix added to add commonjs external nodes.
   "\u0000commonjs-external:",
+  // Vite emits paths with leading ../ that need stripping.
+  "../",
   // More rollup magic prefixing.
-  "\u0000"
+  "\u0000",
 ];
 
 const ignoreNodes = new Set(
@@ -17,12 +19,12 @@ const ignoreNodes = new Set(
     // Rollup specific magic module.
     "\u0000commonjsHelpers",
     "commonjsHelpers",
-    "babelHelpers"
+    "babelHelpers",
   ].concat(builtins)
 );
 
 function removedIgnoredFiles(nodes: string[]) {
-  return nodes.filter(v => !ignoreNodes.has(v));
+  return nodes.filter((v) => !ignoreNodes.has(v));
 }
 
 function getAllGraphFiles(graph: GraphEdges): string[] {
@@ -45,10 +47,16 @@ export function cleanGraph(graph: GraphEdges): GraphEdges {
         continue;
       }
 
-      for (const magicPrefix of prefixStrips) {
-        if (node[key]!.startsWith(magicPrefix)) {
-          if (node[key]!.length !== magicPrefix.length) {
-            node[key] = node[key]!.slice(magicPrefix.length);
+      // Loop to handle paths with multiple leading ../ sequences (Vite).
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const magicPrefix of prefixStrips) {
+          if (node[key]!.startsWith(magicPrefix)) {
+            if (node[key]!.length !== magicPrefix.length) {
+              node[key] = node[key]!.slice(magicPrefix.length);
+              changed = true;
+            }
           }
         }
       }

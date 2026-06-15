@@ -147,6 +147,18 @@ export default function Home(props: Props) {
                     );
                   }}
                 />
+                <Route
+                  path="/vite"
+                  component={(h: { history: History }) => {
+                    return (
+                      <Importer
+                        importType={ImportTypes.VITE}
+                        graphFileName="vite-bundle.json"
+                        history={h.history as any}
+                      />
+                    );
+                  }}
+                />
               </Switch>
             </div>
           </div>

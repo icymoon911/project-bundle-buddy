@@ -6,11 +6,12 @@ import { getFileSize, getFileSizeSplit, getPercent } from "./stringFormats";
 import BarChart from "./BarChart";
 import { ProcessedImportState, SizeData } from "../types";
 
-export const typeColors = {
+export const typeColors: Record<string, string> = {
   js: mainFileColor,
   ts: mainFileColor,
   jsx: mainFileColor,
   tsx: mainFileColor,
+  css: "#cad8a3",
 };
 
 const frameProps = {

@@ -8,10 +8,15 @@ import {
   ImportState,
   ImportTypes,
   EsBuildMetadata,
+  ViteMetadata,
   ProcessedBundle,
 } from "../types";
 import { storeResolveState } from "../routes";
 import { toEdges, toProcessedBundles } from "./esbuild";
+import {
+  toEdges as viteToEdges,
+  toProcessedBundles as viteToProcessedBundles,
+} from "./vite";
 import { mergeProcessedBundles } from "./process_sourcemaps";
 import { cleanGraph } from "./graph_process";
 import { statsToGraph } from "./stats_to_graph";
@@ -131,8 +136,8 @@ class Import extends Component<ImportProps, ImportState> {
     graphFile: File | undefined,
     importType: ImportTypes
   ) {
-    // ESBuild does not need sourcemap files.
-    if (importType === ImportTypes.ESBUILD) {
+    // ESBuild and Vite do not need sourcemap files.
+    if (importType === ImportTypes.ESBUILD || importType === ImportTypes.VITE) {
       return graphFile != null;
     }
 
@@ -150,6 +155,25 @@ class Import extends Component<ImportProps, ImportState> {
         graphEdges: toEdges(graphContents),
         processedSourceMap: mergeProcessedBundles(
           toProcessedBundles(graphContents)
+        ),
+      };
+
+      this.props.history.push(
+        `/${this.props.importType}/resolve`,
+        storeResolveState(state)
+      );
+      return;
+    }
+
+    if (importType === ImportTypes.VITE && this.state.graphFile != null) {
+      const graphContents = JSON.parse(
+        await readFileAsText(this.state.graphFile)
+      ) as ViteMetadata;
+
+      const state: ImportResolveState = {
+        graphEdges: cleanGraph(viteToEdges(graphContents)),
+        processedSourceMap: mergeProcessedBundles(
+          viteToProcessedBundles(graphContents)
         ),
       };
 
@@ -211,7 +235,7 @@ class Import extends Component<ImportProps, ImportState> {
   }
 
   disableSourceMapInput(importType: ImportTypes) {
-    if (importType === ImportTypes.ESBUILD) {
+    if (importType === ImportTypes.ESBUILD || importType === ImportTypes.VITE) {
       return true;
     }
 
@@ -441,6 +465,78 @@ buildEnd() {
             className="copy-button"
             aria-label="Copy sourcemap snippet to clipboard"
           />
+        </div>
+      );
+    } else if (type === ImportTypes.VITE) {
+      instructions = (
+        <div>
+          <p>
+            Add the following plugin to your <code>vite.config.ts</code> to emit
+            a <code>vite-bundle.json</code> metadata file on each build:
+          </p>
+          <code>
+            <pre>
+              {`// vite.config.ts
+import { defineConfig, Plugin } from "vite";
+import fs from "fs";
+import path from "path";
+
+function viteBundleMetadata(): Plugin {
+  return {
+    name: "vite-bundle-metadata",
+    apply: "build",
+    enforce: "post",
+    closeBundle() {
+      const outDir = "dist";
+      const meta: any = { inputs: {}, outputs: {} };
+
+      // Scan output assets for chunk metadata
+      const files = fs.readdirSync(path.resolve(outDir + "/assets"));
+      for (const f of files) {
+        const fullPath = path.resolve(outDir + "/assets/" + f);
+        const stat = fs.statSync(fullPath);
+        meta.outputs["assets/" + f] = {
+          bytes: stat.size,
+          inputs: { [fullPath]: { bytesInOutput: stat.size } },
+        };
+      }
+
+      fs.writeFileSync(
+        "vite-bundle.json",
+        JSON.stringify(meta, null, 2)
+      );
+    },
+  };
+}
+
+export default defineConfig({
+  plugins: [viteBundleMetadata()],
+});`}
+            </pre>
+            <button
+              onClick={() =>
+                toClipboard(
+                  `// vite.config.ts\nimport { defineConfig, Plugin } from "vite";\n\nfunction viteBundleMetadata(): Plugin {\n  return {\n    name: "vite-bundle-metadata",\n    apply: "build",\n    enforce: "post",\n    closeBundle() { /* write metafile */ },\n  };\n}\n\nexport default defineConfig({\n  plugins: [viteBundleMetadata()],\n});`
+                )
+              }
+              className="copy-button"
+              aria-label="Copy vite config snippet to clipboard"
+            />
+          </code>
+          <p>
+            Then run the build to generate <code>vite-bundle.json</code>:
+          </p>
+          <code>
+            <pre>npx vite build</pre>
+          </code>
+          <button
+            onClick={() => toClipboard("npx vite build")}
+            className="copy-button"
+            aria-label="Copy vite build command to clipboard"
+          />
+          <p>
+            Upload the generated <code>vite-bundle.json</code> file above.
+          </p>
         </div>
       );
     }
