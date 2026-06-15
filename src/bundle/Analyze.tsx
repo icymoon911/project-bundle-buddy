@@ -58,14 +58,19 @@ export default function Analyze(props: Props) {
             <b>Details</b>
           </p>
           <p>
-            This project bundled{" "}
-            {withNodeModules && (
-              <span>
-                <b>{withNodeModules}</b> node_modules
-              </span>
-            )}{" "}
-            {withNodeModules && "with "}
-            <b>{withoutNodeModules}</b> files
+            {withNodeModules > 0 ? (
+              <>
+                This project bundled{" "}
+                <span>
+                  <b>{withNodeModules}</b> node_modules
+                </span>{" "}
+                with <b>{withoutNodeModules}</b> files
+              </>
+            ) : (
+              <>
+                This project bundled <b>{withoutNodeModules}</b> files
+              </>
+            )}
           </p>
         </div>
         <br />

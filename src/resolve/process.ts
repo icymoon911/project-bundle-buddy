@@ -94,15 +94,26 @@ function getRollups(files: { [fileName: string]: BundledFile }) {
     const index = key.lastIndexOf("/");
     const fileName = key.slice(index + 1).split(/\./g);
 
+    const parentIndex = key.indexOf("/");
+    let parent = EMPTY_NAME;
+
+    if (parentIndex !== -1) {
+      parent = key.slice(0, parentIndex);
+    }
+
+    // Always count the file towards its directory rollup so the directory
+    // totals sum up to the overall total shown in the overview.
+    if (summary.directories[parent]) {
+      summary.directories[parent].totalBytes += files[key].totalBytes;
+    } else {
+      summary.directories[parent] = {
+        name: parent,
+        totalBytes: files[key].totalBytes,
+      };
+    }
+
     if (fileName.length > 1) {
       const extension = fileName[fileName.length - 1].split("?")[0];
-
-      const parentIndex = key.indexOf("/");
-      let parent = EMPTY_NAME;
-
-      if (parentIndex !== -1) {
-        parent = key.slice(0, parentIndex);
-      }
 
       if (summary.fileTypes[extension]) {
         summary.fileTypes[extension].totalBytes += files[key].totalBytes;
@@ -112,12 +123,16 @@ function getRollups(files: { [fileName: string]: BundledFile }) {
           totalBytes: files[key].totalBytes,
         };
       }
-
-      if (summary.directories[parent]) {
-        summary.directories[parent].totalBytes += files[key].totalBytes;
+    } else {
+      // Files without a dot in their name (e.g. LICENSE, README, or extensionless
+      // entry files) are bucketed into an "other" file-type so their bytes still
+      // appear in the file-type rollup and match the total.
+      const extension = "other";
+      if (summary.fileTypes[extension]) {
+        summary.fileTypes[extension].totalBytes += files[key].totalBytes;
       } else {
-        summary.directories[parent] = {
-          name: parent,
+        summary.fileTypes[extension] = {
+          name: extension,
           totalBytes: files[key].totalBytes,
         };
       }

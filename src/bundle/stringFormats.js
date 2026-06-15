@@ -1,11 +1,24 @@
 const mb = 1024 * 1024;
 const kb = 1024;
 
+/**
+ * Round a number to the given number of decimal places, compensating for
+ * IEEE-754 floating-point representation errors that cause values like
+ * 1.005 to be stored as 1.0049999… and then incorrectly rounded down by
+ * toFixed.
+ */
+function preciseToFixed(num, decimals) {
+  return (
+    Math.round((num + Number.EPSILON) * Math.pow(10, decimals)) /
+    Math.pow(10, decimals)
+  ).toFixed(decimals);
+}
+
 export function getFileSizeSplit(size) {
   if (!size || size === 0) return { size: 0, type: "KB" };
   let value = size && size >= mb ? size / mb : size / kb;
-  if (value < 1 || size >= mb) value = value.toFixed(2);
-  else value = value.toFixed(0);
+  if (value < 1 || size >= mb) value = preciseToFixed(value, 2);
+  else value = preciseToFixed(value, 0);
   return { value, type: size >= mb ? "MB" : "KB" };
 }
 

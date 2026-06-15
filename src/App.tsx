@@ -4,6 +4,7 @@ import Header from "./Header";
 import TestProcess from "./TestProcess";
 import ErrorBoundry from "./ErrorBoundry";
 import { Location } from "history";
+import { History } from "history";
 import {
   ImportResolveState,
   ProcessedImportState,
@@ -26,14 +27,54 @@ export default function App() {
                   path="/bundle"
                   component={({
                     location,
+                    history,
                   }: {
                     location: Location<ProcessedImportState>;
+                    history: History;
                   }) => {
                     const state = stateFromProcessedKey(
-                      (location.state as any).key
+                      ((location.state as any) || { key: "" }).key
                     );
                     if (state == null) {
-                      throw new Error("invalid state");
+                      return (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            height: "80vh",
+                            textAlign: "center",
+                            padding: "2rem",
+                          }}
+                        >
+                          <h2>Session Expired</h2>
+                          <p
+                            style={{
+                              maxWidth: "480px",
+                              marginBottom: "1.5rem",
+                            }}
+                          >
+                            Your analysis session is no longer available. This
+                            can happen when the page is refreshed or the browser
+                            tab was reopened. Please re-import your bundle files
+                            to start a new analysis.
+                          </p>
+                          <button
+                            onClick={() => history.push("/")}
+                            style={{
+                              padding: "0.75rem 1.5rem",
+                              fontSize: "1rem",
+                              cursor: "pointer",
+                              border: "1px solid #ccc",
+                              borderRadius: "4px",
+                              background: "#fff",
+                            }}
+                          >
+                            Back to Home
+                          </button>
+                        </div>
+                      );
                     }
 
                     let params = new URLSearchParams(location.search);

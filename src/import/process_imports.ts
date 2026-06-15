@@ -89,13 +89,14 @@ export function buildImportErrorReport(
       importError = "";
     }
 
+    const sourceMapFileNames = files.sourceMapFiles.map((f) => f.name);
     reportUri.addError(
-      Object.keys(files.sourceMapFiles.map((f) => f.name)).join(","),
+      sourceMapFileNames.join(","),
       processed.sourceMapProcessError
     );
-    importError += `${Object.keys(files.sourceMapFiles.map((f) => f.name)).join(
-      ","
-    )}: ${processed.sourceMapProcessError}`;
+    importError += `${sourceMapFileNames.join(",")}: ${
+      processed.sourceMapProcessError
+    }`;
   }
 
   return {

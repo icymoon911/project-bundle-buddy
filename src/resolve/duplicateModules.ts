@@ -18,6 +18,14 @@ export function splitBySemanticModulePath(path: string): string[] {
 
   for (const p of folderSplit) {
     if (p === "node_modules") {
+      // Flush any pending scoped package (e.g. "@scope" without a package name
+      // following it) before entering the next node_modules segment. This
+      // prevents scopedPackage from being silently overwritten when consecutive
+      // nested node_modules contain scoped packages.
+      if (scopedPackage.length) {
+        ret.push(scopedPackage);
+        scopedPackage = "";
+      }
       lastNodeModules = true;
       ret.push(p);
       continue;
@@ -40,6 +48,11 @@ export function splitBySemanticModulePath(path: string): string[] {
     ret.push(p);
   }
 
+  // Flush any remaining scoped package at the end of the path
+  if (scopedPackage.length) {
+    ret.push(scopedPackage);
+  }
+
   return ret;
 }
 
@@ -59,11 +72,11 @@ export function findDuplicateModules(
     value: string[];
   }> = [];
   const containsNodeModules = sourceMapFiles.filter(
-    v => v.indexOf("node_modules") > -1
+    (v) => v.indexOf("node_modules") > -1
   );
   const explodedPaths = containsNodeModules
-    .map(v => splitBySemanticModulePath(v))
-    .map(splitPath => {
+    .map((v) => splitBySemanticModulePath(v))
+    .map((splitPath) => {
       return {
         nodeModulePreamables: splitPath
           .map((v, i) => {
@@ -73,7 +86,7 @@ export function findDuplicateModules(
 
             return undefined;
           })
-          .filter(v => v != null)
+          .filter((v) => v != null),
       };
     })
     .sort(
@@ -99,6 +112,9 @@ export function findDuplicateModules(
         dupes[module].imports.add(from);
       } else {
         seen.add(module);
+        // Record the first occurrence's `from` so it is not lost when a
+        // duplicate is later found at a different nesting depth.
+        dupes[module] = { imports: new Set<string>([from]) };
       }
     }
   }
@@ -107,7 +123,7 @@ export function findDuplicateModules(
     if (dupes[key].imports?.size > 1) {
       ret.push({
         key,
-        value: Array.from(dupes[key].imports)
+        value: Array.from(dupes[key].imports),
       });
     }
   }
