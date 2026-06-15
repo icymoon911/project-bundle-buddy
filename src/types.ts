@@ -129,13 +129,17 @@ export interface ProcessedBundle {
   totalBytes: number;
 }
 
-export interface ImportProcess {
+export interface ImportProcessResult {
   bundleSizes: { [bundleName: string]: BundledFile };
-  processedSourcemap?: ProcessedBundle;
-  processedGraph?: GraphEdges;
-  sourceMapProcessError?: Error;
-  graphProcessError?: Error;
+  processedSourcemap: ProcessedBundle;
+  processedGraph: GraphEdges;
 }
+
+export type ImportProcessError =
+  | { stage: "sourcemap"; error: Error }
+  | { stage: "graph"; error: Error };
+
+export type Either<E, T> = { ok: true; value: T } | { ok: false; error: E };
 
 /**
  * Stats exported from esbuild when passed the --metafile flag
