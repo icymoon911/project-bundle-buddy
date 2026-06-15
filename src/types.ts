@@ -111,13 +111,6 @@ export interface TrimmedDataNode {
   transitiveRequiresSize: number;
 }
 
-export interface ImportState {
-  sourceMapFiles?: File[];
-  graphFile?: File;
-  importError?: string | null;
-  importErrorUri?: string | null;
-}
-
 export interface BundledFile {
   totalBytes: number;
 }
@@ -127,14 +120,6 @@ export type BundledFiles = { [fileName: string]: BundledFile };
 export interface ProcessedBundle {
   files: BundledFiles;
   totalBytes: number;
-}
-
-export interface ImportProcess {
-  bundleSizes: { [bundleName: string]: BundledFile };
-  processedSourcemap?: ProcessedBundle;
-  processedGraph?: GraphEdges;
-  sourceMapProcessError?: Error;
-  graphProcessError?: Error;
 }
 
 /**

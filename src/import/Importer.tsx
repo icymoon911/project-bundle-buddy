@@ -1,11 +1,16 @@
-import React, { Component } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import { toClipboard } from "./clipboard";
 import { readFileAsText, readFilesAsText } from "./file_reader";
 import { processImports, buildImportErrorReport } from "./process_imports";
 import {
   ImportProps,
   ImportResolveState,
-  ImportState,
   ImportTypes,
   EsBuildMetadata,
   ProcessedBundle,
@@ -41,186 +46,171 @@ function removeWebpackMagicFiles(v: ProcessedBundle) {
   return ret;
 }
 
-// noopener noreferrer
-class Import extends Component<ImportProps, ImportState> {
-  sourceMapInput?: React.RefObject<HTMLInputElement & { files: FileList }>;
-  graphInput?: React.RefObject<HTMLInputElement & { files: FileList }>;
-  generateGraphContents: React.RefObject<HTMLSpanElement>;
-
-  constructor(props: ImportProps) {
-    super(props);
-
-    this.sourceMapInput = React.createRef();
-    this.graphInput = React.createRef();
-    this.generateGraphContents = React.createRef();
+function canProcess(
+  sourceMapFiles: File[] | undefined,
+  graphFile: File | undefined,
+  importType: ImportTypes
+) {
+  // ESBuild does not need sourcemap files.
+  if (importType === ImportTypes.ESBUILD) {
+    return graphFile != null;
   }
 
-  state: ImportState = {};
+  return (
+    sourceMapFiles != null && sourceMapFiles.length > 0 && graphFile != null
+  );
+}
 
-  onGraphInput() {
-    if (
-      this.graphInput != null &&
-      this.graphInput.current != null &&
-      this.graphInput.current.files.length
-    ) {
-      this.setState(
-        {
-          graphFile: this.graphInput.current.files[0],
-        },
-        () => {
-          if (
-            this.canProcess(
-              this.state.sourceMapFiles,
-              this.state.graphFile,
-              this.props.importType
-            )
-          ) {
-            this.processFiles(this.props.importType);
-          }
-        }
-      );
+function disableSourceMapInput(importType: ImportTypes) {
+  return importType === ImportTypes.ESBUILD;
+}
+
+function hasGraphFile(file?: File) {
+  return file != null || window.location.pathname.includes("resolve");
+}
+
+function hasSourceMapFile(files?: File[]) {
+  return (
+    (files != null && files.length > 0) ||
+    window.location.pathname.includes("resolve")
+  );
+}
+
+function Importer(props: ImportProps) {
+  const sourceMapInputRef = useRef<HTMLInputElement & { files: FileList }>(
+    null
+  );
+  const graphInputRef = useRef<HTMLInputElement & { files: FileList }>(null);
+  const generateGraphContentsRef = useRef<HTMLSpanElement>(null);
+
+  const [sourceMapFiles, setSourceMapFiles] = useState<File[] | undefined>();
+  const [graphFile, setGraphFile] = useState<File | undefined>();
+  const [importError, setImportError] = useState<string | null | undefined>();
+  const [importErrorUri, setImportErrorUri] = useState<
+    string | null | undefined
+  >();
+
+  // Track whether we should attempt processing — set when files change
+  const [shouldProcess, setShouldProcess] = useState(false);
+
+  const onGraphInput = useCallback(() => {
+    const el = graphInputRef.current;
+    if (el != null && el.files.length > 0) {
+      setGraphFile(el.files[0]);
+      setShouldProcess(true);
     } else {
-      this.setState({
-        graphFile: undefined,
-      });
+      setGraphFile(undefined);
     }
-  }
+  }, []);
 
-  onSourceMapInput() {
-    if (
-      this.sourceMapInput != null &&
-      this.sourceMapInput.current != null &&
-      this.sourceMapInput.current.files.length
-    ) {
-      this.setState(
-        {
-          sourceMapFiles: Array.from(this.sourceMapInput.current.files),
-        },
-        () => {
-          if (
-            this.canProcess(
-              this.state.sourceMapFiles,
-              this.state.graphFile,
-              this.props.importType
-            )
-          ) {
-            this.processFiles(this.props.importType);
-          }
-        }
-      );
+  const onSourceMapInput = useCallback(() => {
+    const el = sourceMapInputRef.current;
+    if (el != null && el.files.length > 0) {
+      setSourceMapFiles(Array.from(el.files));
+      setShouldProcess(true);
     } else {
-      this.setState({
-        sourceMapFiles: undefined,
-      });
+      setSourceMapFiles(undefined);
     }
-  }
+  }, []);
 
-  hasGraphFile(file?: File) {
-    return file != null || window.location.pathname.includes("resolve");
-  }
+  // useEffect to process files when state changes after an input event
+  useEffect(() => {
+    if (!shouldProcess) return;
+    if (!canProcess(sourceMapFiles, graphFile, props.importType)) return;
 
-  hasSourceMapFile(files?: File[]) {
-    return (
-      (files != null && files.length) ||
-      window.location.pathname.includes("resolve")
-    );
-  }
+    // Reset the flag
+    setShouldProcess(false);
 
-  canProcess(
-    sourceMapFiles: File[] | undefined,
-    graphFile: File | undefined,
-    importType: ImportTypes
-  ) {
-    // ESBuild does not need sourcemap files.
-    if (importType === ImportTypes.ESBUILD) {
-      return graphFile != null;
-    }
+    let cancelled = false;
 
-    return sourceMapFiles != null && sourceMapFiles.length && graphFile != null;
-  }
+    async function processFiles() {
+      const importType = props.importType;
 
-  async processFiles(importType: ImportTypes) {
-    console.log("IN PROCESS");
-    if (importType === ImportTypes.ESBUILD && this.state.graphFile != null) {
-      const graphContents = JSON.parse(
-        await readFileAsText(this.state.graphFile)
-      ) as EsBuildMetadata;
+      if (importType === ImportTypes.ESBUILD && graphFile != null) {
+        const graphContents = JSON.parse(
+          await readFileAsText(graphFile)
+        ) as EsBuildMetadata;
 
-      const state: ImportResolveState = {
-        graphEdges: toEdges(graphContents),
-        processedSourceMap: mergeProcessedBundles(
-          toProcessedBundles(graphContents)
-        ),
-      };
+        const state: ImportResolveState = {
+          graphEdges: toEdges(graphContents),
+          processedSourceMap: mergeProcessedBundles(
+            toProcessedBundles(graphContents)
+          ),
+        };
 
-      this.props.history.push(
-        `/${this.props.importType}/resolve`,
-        storeResolveState(state)
-      );
-      return;
-    }
+        if (!cancelled) {
+          props.history.push(
+            `/${importType}/resolve`,
+            storeResolveState(state)
+          );
+        }
+        return;
+      }
 
-    if (this.state.graphFile == null || this.state.sourceMapFiles == null) {
-      return;
-    }
+      if (graphFile == null || sourceMapFiles == null) {
+        return;
+      }
 
-    const graphContents = await readFileAsText(this.state.graphFile);
-    const sourceMapContents = await readFilesAsText(this.state.sourceMapFiles);
+      const graphContents = await readFileAsText(graphFile);
+      const sourceMapContents = await readFilesAsText(sourceMapFiles);
 
-    let processed;
-    if (importType === ImportTypes.WEBPACK || importType === ImportTypes.CRA) {
-      processed = await processImports({
+      const result = await processImports({
         sourceMapContents,
         graphEdges: graphContents,
-        graphPreProcessFn: (g) => cleanGraph(statsToGraph(g)),
+        graphPreProcessFn:
+          importType === ImportTypes.WEBPACK || importType === ImportTypes.CRA
+            ? (g) => cleanGraph(statsToGraph(g))
+            : undefined,
       });
 
-      if (processed.processedSourcemap != null) {
-        processed.processedSourcemap = removeWebpackMagicFiles(
-          processed.processedSourcemap
+      if (cancelled) return;
+
+      // For webpack/CRA, strip magic files from the processed sourcemap
+      // before we report errors or navigate.
+      if (
+        result.ok &&
+        (importType === ImportTypes.WEBPACK || importType === ImportTypes.CRA)
+      ) {
+        result.value.processedSourcemap = removeWebpackMagicFiles(
+          result.value.processedSourcemap
         );
       }
-    } else {
-      processed = await processImports({
-        sourceMapContents,
-        graphEdges: graphContents,
-      });
-    }
 
-    const { importError, importErrorUri } = buildImportErrorReport(processed, {
-      graphFile: this.state.graphFile,
-      sourceMapFiles: this.state.sourceMapFiles,
-    });
-
-    this.setState({
-      importError,
-      importErrorUri,
-    });
-
-    if (this.props.history != null && this.state.importError == null) {
-      const state: ImportResolveState = {
-        graphEdges: processed.processedGraph!,
-        processedSourceMap: processed.processedSourcemap!,
-      };
-
-      this.props.history.push(
-        `/${this.props.importType}/resolve`,
-        storeResolveState(state)
+      const { importError: err, importErrorUri: uri } = buildImportErrorReport(
+        result,
+        {
+          graphFile: graphFile,
+          sourceMapFiles: sourceMapFiles,
+        }
       );
+
+      setImportError(err);
+      setImportErrorUri(uri);
+
+      if (result.ok) {
+        const state: ImportResolveState = {
+          graphEdges: result.value.processedGraph,
+          processedSourceMap: result.value.processedSourcemap,
+        };
+
+        props.history.push(`/${importType}/resolve`, storeResolveState(state));
+      }
     }
-  }
 
-  disableSourceMapInput(importType: ImportTypes) {
-    if (importType === ImportTypes.ESBUILD) {
-      return true;
-    }
+    processFiles();
 
-    return false;
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldProcess, sourceMapFiles, graphFile, props]);
 
-  render() {
-    const type = this.props.importType;
-    let graph, sourcemaps, instructions;
+  const type = props.importType;
+
+  const { graph, sourcemaps, instructions } = useMemo(() => {
+    let graph: React.ReactNode = null;
+    let sourcemaps: React.ReactNode = null;
+    let instructions: React.ReactNode = null;
+
     if (type === ImportTypes.WEBPACK) {
       sourcemaps = (
         <div className="right-spacing">
@@ -269,8 +259,8 @@ return;
               <span className="add-diff">
                 {`
 fs.writeFileSync(
-path.join(__dirname, "stats.json"), 
-JSON.stringify(stats.toJson()), 
+path.join(__dirname, "stats.json"),
+JSON.stringify(stats.toJson()),
 'utf-8');
 });
 `}
@@ -333,7 +323,7 @@ JSON.stringify(stats.toJson()),
             <pre>
               <span
                 id="rollup-generate-graph"
-                ref={this.generateGraphContents}
+                ref={generateGraphContentsRef}
                 className="add-diff"
               >
                 {`
@@ -348,9 +338,9 @@ buildEnd() {
       }
     }
   }
-  
+
   fs.writeFileSync(
-      path.join(__dirname, 'graph.json'), 
+      path.join(__dirname, 'graph.json'),
       JSON.stringify(deps, null, 2));
 },
 }]`}
@@ -358,9 +348,7 @@ buildEnd() {
             </pre>
             <button
               onClick={() =>
-                toClipboard(
-                  this.generateGraphContents.current!.textContent || ""
-                )
+                toClipboard(generateGraphContentsRef.current!.textContent || "")
               }
               className="copy-button"
               aria-label="Copy stats.json programatic snippit to clipboard"
@@ -373,7 +361,7 @@ buildEnd() {
           <p>rollup.config.js</p>
           <code>
             <pre>
-              {`output: { 
+              {`output: {
     file: '\`\${outFolder}/dist.js',
     format: 'iife',
     name: 'PROJECT_NAME',\n`}
@@ -445,26 +433,63 @@ buildEnd() {
       );
     }
 
-    return (
+    return { graph, sourcemaps, instructions };
+  }, [type]);
+
+  return (
+    <div>
       <div>
-        <div>
-          {this.state.importError != null ? (
-            <div className="error">
-              <h2>Import error</h2>
-              <code>
-                <pre>{`${this.state.importError}`}</pre>
-              </code>
-              <a
-                href={this.state.importErrorUri || ""}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                File a bug
-              </a>
+        {importError != null ? (
+          <div className="error">
+            <h2>Import error</h2>
+            <code>
+              <pre>{`${importError}`}</pre>
+            </code>
+            <a
+              href={importErrorUri || ""}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              File a bug
+            </a>
+          </div>
+        ) : null}
+        <h3>Upload assets:</h3>
+        <div className="upload-files-container flex">
+          <div className="right-spacing">
+            <div className="button-import-container">
+              <button tabIndex={-1} className="import-asset">
+                <img
+                  height="20px"
+                  width="20px"
+                  className="attach-icon"
+                  alt="attach file"
+                  src="/img/attach_icon.svg"
+                />
+                {props.graphFileName}
+                <input
+                  id="stats"
+                  type="file"
+                  accept=".json"
+                  ref={graphInputRef}
+                  onInput={onGraphInput}
+                />
+              </button>
+              <img
+                src={
+                  hasGraphFile(graphFile)
+                    ? "/img/ok_icon.svg"
+                    : "/img/warn_icon.svg"
+                }
+                height="24px"
+                width="24px"
+                alt={hasGraphFile(graphFile) ? "OK import" : "missing import"}
+                className="status-icon"
+              />
             </div>
-          ) : null}
-          <h3>Upload assets:</h3>
-          <div className="upload-files-container flex">
+            {graph}
+          </div>
+          {disableSourceMapInput(props.importType) ? null : (
             <div className="right-spacing">
               <div className="button-import-container">
                 <button tabIndex={-1} className="import-asset">
@@ -475,80 +500,41 @@ buildEnd() {
                     alt="attach file"
                     src="/img/attach_icon.svg"
                   />
-                  {this.props.graphFileName}
+                  sourcemaps
                   <input
-                    id="stats"
+                    id="sourcemap"
+                    multiple
                     type="file"
-                    accept=".json"
-                    ref={this.graphInput}
-                    onInput={() => this.onGraphInput()}
+                    accept=".map,.sourcemap"
+                    ref={sourceMapInputRef}
+                    onInput={onSourceMapInput}
                   />
                 </button>
                 <img
                   src={
-                    this.hasGraphFile(this.state.graphFile)
+                    hasSourceMapFile(sourceMapFiles)
                       ? "/img/ok_icon.svg"
                       : "/img/warn_icon.svg"
                   }
                   height="24px"
                   width="24px"
                   alt={
-                    this.hasGraphFile(this.state.graphFile)
+                    hasSourceMapFile(sourceMapFiles)
                       ? "OK import"
                       : "missing import"
                   }
                   className="status-icon"
                 />
               </div>
-              {graph}
+              {sourcemaps}
             </div>
-            {this.disableSourceMapInput(this.props.importType) ? null : (
-              <div className="right-spacing">
-                <div className="button-import-container">
-                  <button tabIndex={-1} className="import-asset">
-                    <img
-                      height="20px"
-                      width="20px"
-                      className="attach-icon"
-                      alt="attach file"
-                      src="/img/attach_icon.svg"
-                    />
-                    sourcemaps
-                    <input
-                      id="sourcemap"
-                      multiple
-                      type="file"
-                      accept=".map,.sourcemap"
-                      ref={this.sourceMapInput}
-                      onInput={() => this.onSourceMapInput()}
-                    />
-                  </button>
-                  <img
-                    src={
-                      this.hasSourceMapFile(this.state.sourceMapFiles)
-                        ? "/img/ok_icon.svg"
-                        : "/img/warn_icon.svg"
-                    }
-                    height="24px"
-                    width="24px"
-                    alt={
-                      this.hasSourceMapFile(this.state.sourceMapFiles)
-                        ? "OK import"
-                        : "missing import"
-                    }
-                    className="status-icon"
-                  />
-                </div>
-                {sourcemaps}
-              </div>
-            )}
-          </div>
-
-          <div className="import-instruction">{instructions}</div>
+          )}
         </div>
+
+        <div className="import-instruction">{instructions}</div>
       </div>
-    );
-  }
+    </div>
+  );
 }
 
-export default Import;
+export default Importer;

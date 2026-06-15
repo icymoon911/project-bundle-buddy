@@ -2,8 +2,34 @@ import {
   calculateSourcemapFileContents,
   mergeProcessedBundles,
 } from "./process_sourcemaps";
-import { GraphEdges, ProcessedBundle, ImportProcess } from "../types";
+import { GraphEdges, ProcessedBundle } from "../types";
 import { ReportErrorUri } from "../report_error";
+
+/**
+ * Successful result from processImports.
+ */
+export interface ImportProcessSuccess {
+  bundleSizes: { [bundleName: string]: { totalBytes: number } };
+  processedSourcemap: ProcessedBundle;
+  processedGraph: GraphEdges;
+}
+
+/**
+ * Failure result from processImports, carrying all collected errors.
+ */
+export interface ImportProcessFailure {
+  sourceMapErrors: Error[];
+  graphErrors: Error[];
+}
+
+/**
+ * Either-style result type for processImports.
+ * The caller must discriminate on `ok` before accessing data,
+ * making it impossible to silently ignore errors.
+ */
+export type ImportProcessResult =
+  | { ok: true; value: ImportProcessSuccess }
+  | { ok: false; error: ImportProcessFailure };
 
 // TODO(samccone) we will want to handle more error types.
 function humanizeSourceMapImportError(e: Error) {
@@ -18,41 +44,35 @@ export async function processImports(opts: {
   sourceMapContents: { [filename: string]: string };
   graphEdges: GraphEdges | string;
   graphPreProcessFn?: (contents: any) => GraphEdges;
-}): Promise<ImportProcess> {
-  const ret: ImportProcess = {
-    bundleSizes: {},
-    processedSourcemap: {
-      files: {},
-      totalBytes: 0,
-    },
-  };
+}): Promise<ImportProcessResult> {
+  const sourceMapErrors: Error[] = [];
+  const graphErrors: Error[] = [];
+
+  const bundleSizes: { [bundleName: string]: { totalBytes: number } } = {};
 
   const processed: {
     [bundleName: string]: ProcessedBundle;
   } = {};
 
   for (const bundleName of Object.keys(opts.sourceMapContents)) {
-    if (ret.sourceMapProcessError != null) {
-      continue;
-    }
-
     try {
       processed[bundleName] = await calculateSourcemapFileContents(
         opts.sourceMapContents[bundleName]
       );
     } catch (e) {
-      ret.sourceMapProcessError = new Error(humanizeSourceMapImportError(e));
+      sourceMapErrors.push(new Error(humanizeSourceMapImportError(e)));
     }
   }
 
   for (const bundle of Object.keys(processed)) {
-    ret.bundleSizes[bundle] = {
+    bundleSizes[bundle] = {
       totalBytes: processed[bundle].totalBytes,
     };
   }
 
-  ret.processedSourcemap = mergeProcessedBundles(processed);
+  const processedSourcemap = mergeProcessedBundles(processed);
 
+  let processedGraph: GraphEdges = [];
   try {
     if (typeof opts.graphEdges === "string") {
       let parsedNodes = JSON.parse(opts.graphEdges);
@@ -61,41 +81,58 @@ export async function processImports(opts: {
         parsedNodes = opts.graphPreProcessFn(parsedNodes);
       }
 
-      ret.processedGraph = parsedNodes as GraphEdges;
+      processedGraph = parsedNodes as GraphEdges;
     } else {
-      ret.processedGraph = opts.graphEdges;
+      processedGraph = opts.graphEdges;
     }
   } catch (e) {
-    ret.graphProcessError = new Error(humanizeGraphProcessError(e));
+    graphErrors.push(new Error(humanizeGraphProcessError(e)));
   }
 
-  return ret;
+  if (sourceMapErrors.length > 0 || graphErrors.length > 0) {
+    return {
+      ok: false,
+      error: { sourceMapErrors, graphErrors },
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      bundleSizes,
+      processedSourcemap,
+      processedGraph,
+    },
+  };
 }
 
 export function buildImportErrorReport(
-  processed: ImportProcess,
+  result: ImportProcessResult,
   files: { graphFile: { name: string }; sourceMapFiles: File[] }
-) {
+): { importError: string | null; importErrorUri: string } {
+  if (result.ok) {
+    return { importError: null, importErrorUri: "" };
+  }
+
+  const { sourceMapErrors, graphErrors } = result.error;
   let importError = null;
   const reportUri = new ReportErrorUri();
 
-  if (processed.graphProcessError != null) {
-    importError = `${files.graphFile.name} ${processed.graphProcessError}\n`;
-    reportUri.addError(files.graphFile.name, processed.graphProcessError);
+  for (const err of graphErrors) {
+    importError = `${files.graphFile.name} ${err}\n`;
+    reportUri.addError(files.graphFile.name, err);
   }
 
-  if (processed.sourceMapProcessError != null) {
+  if (sourceMapErrors.length > 0) {
     if (importError == null) {
       importError = "";
     }
 
-    reportUri.addError(
-      Object.keys(files.sourceMapFiles.map((f) => f.name)).join(","),
-      processed.sourceMapProcessError
-    );
-    importError += `${Object.keys(files.sourceMapFiles.map((f) => f.name)).join(
-      ","
-    )}: ${processed.sourceMapProcessError}`;
+    const fileNames = files.sourceMapFiles.map((f) => f.name).join(",");
+    for (const err of sourceMapErrors) {
+      reportUri.addError(fileNames, err);
+      importError += `${fileNames}: ${err}`;
+    }
   }
 
   return {

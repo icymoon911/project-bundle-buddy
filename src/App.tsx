@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Route, Switch } from "react-router-dom";
 import React, { Suspense, lazy } from "react";
 import Header from "./Header";
 import TestProcess from "./TestProcess";
-import ErrorBoundry from "./ErrorBoundry";
+import ErrorBoundary from "./ErrorBoundary";
 import { Location } from "history";
 import {
   ImportResolveState,
@@ -17,7 +17,7 @@ const Home = lazy(() => import("./home/Home"));
 export default function App() {
   return (
     <Router>
-      <ErrorBoundry>
+      <ErrorBoundary>
         <div className="App">
           <div className="Page">
             <Suspense fallback={<div>Loading...</div>}>
@@ -89,7 +89,7 @@ export default function App() {
             </Suspense>
           </div>
         </div>
-      </ErrorBoundry>
+      </ErrorBoundary>
     </Router>
   );
 }
