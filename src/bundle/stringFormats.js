@@ -4,7 +4,8 @@ const kb = 1024;
 export function getFileSizeSplit(size) {
   if (!size || size === 0) return { size: 0, type: "KB" };
   let value = size && size >= mb ? size / mb : size / kb;
-  if (value < 1 || size >= mb) value = value.toFixed(2);
+  if (value < 1 || size >= mb)
+    value = (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2);
   else value = value.toFixed(0);
   return { value, type: size >= mb ? "MB" : "KB" };
 }

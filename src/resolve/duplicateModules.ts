@@ -18,6 +18,11 @@ export function splitBySemanticModulePath(path: string): string[] {
 
   for (const p of folderSplit) {
     if (p === "node_modules") {
+      // Flush any pending scoped package before starting a new node_modules segment
+      if (scopedPackage.length) {
+        ret.push(scopedPackage);
+        scopedPackage = "";
+      }
       lastNodeModules = true;
       ret.push(p);
       continue;
@@ -40,6 +45,11 @@ export function splitBySemanticModulePath(path: string): string[] {
     ret.push(p);
   }
 
+  // Flush any remaining scoped package at the end
+  if (scopedPackage.length) {
+    ret.push(scopedPackage);
+  }
+
   return ret;
 }
 
@@ -59,11 +69,11 @@ export function findDuplicateModules(
     value: string[];
   }> = [];
   const containsNodeModules = sourceMapFiles.filter(
-    v => v.indexOf("node_modules") > -1
+    (v) => v.indexOf("node_modules") > -1
   );
   const explodedPaths = containsNodeModules
-    .map(v => splitBySemanticModulePath(v))
-    .map(splitPath => {
+    .map((v) => splitBySemanticModulePath(v))
+    .map((splitPath) => {
       return {
         nodeModulePreamables: splitPath
           .map((v, i) => {
@@ -73,7 +83,7 @@ export function findDuplicateModules(
 
             return undefined;
           })
-          .filter(v => v != null)
+          .filter((v) => v != null),
       };
     })
     .sort(
@@ -88,8 +98,16 @@ export function findDuplicateModules(
     const from = d.nodeModulePreamables[d.nodeModulePreamables.length - 1][1];
 
     if (d.nodeModulePreamables.length === 1) {
-      dupes[module] = { imports: new Set<string>(["<PROJECT ROOT>"]) };
-      seen.add(module);
+      if (seen.has(module)) {
+        // Already seen, add to dupes
+        if (dupes[module] == null) {
+          dupes[module] = { imports: new Set<string>([]) };
+        }
+        dupes[module].imports.add("<PROJECT ROOT>");
+      } else {
+        seen.add(module);
+        dupes[module] = { imports: new Set<string>(["<PROJECT ROOT>"]) };
+      }
     } else {
       if (seen.has(module)) {
         if (dupes[module] == null) {
@@ -99,6 +117,7 @@ export function findDuplicateModules(
         dupes[module].imports.add(from);
       } else {
         seen.add(module);
+        dupes[module] = { imports: new Set<string>([from]) };
       }
     }
   }
@@ -107,7 +126,7 @@ export function findDuplicateModules(
     if (dupes[key].imports?.size > 1) {
       ret.push({
         key,
-        value: Array.from(dupes[key].imports)
+        value: Array.from(dupes[key].imports),
       });
     }
   }

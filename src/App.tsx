@@ -26,14 +26,18 @@ export default function App() {
                   path="/bundle"
                   component={({
                     location,
+                    history,
                   }: {
                     location: Location<ProcessedImportState>;
+                    history: any;
                   }) => {
                     const state = stateFromProcessedKey(
-                      (location.state as any).key
+                      (location.state as any)?.key
                     );
                     if (state == null) {
-                      throw new Error("invalid state");
+                      // State lost (e.g., after page refresh), redirect to home
+                      history.push("/");
+                      return null;
                     }
 
                     let params = new URLSearchParams(location.search);

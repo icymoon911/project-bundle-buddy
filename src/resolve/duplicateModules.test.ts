@@ -1,6 +1,6 @@
 import {
   findDuplicateModules,
-  splitBySemanticModulePath
+  splitBySemanticModulePath,
 } from "./duplicateModules";
 
 it("handles non-scoped packages", () => {
@@ -22,7 +22,7 @@ it("handles one module", () => {
 it("handles multiple modules", () => {
   const ret = findDuplicateModules([
     "foo/zap/node_modules/tap",
-    "foo/zap/node_modules/bar"
+    "foo/zap/node_modules/bar",
   ]);
 
   expect(ret.length).toBe(0);
@@ -31,7 +31,7 @@ it("handles multiple modules", () => {
 it("correctly splits @ scoped modules", () => {
   const ret = findDuplicateModules([
     "foo/zap/node_modules/@tap/wow",
-    "foo/zap/node_modules/no/node_modules/@tap/zap"
+    "foo/zap/node_modules/no/node_modules/@tap/zap",
   ]);
 
   expect(ret.length).toBe(0);
@@ -40,7 +40,7 @@ it("correctly splits @ scoped modules", () => {
 it("correctly find duplicated @ scoped modules", () => {
   const ret = findDuplicateModules([
     "foo/zap/node_modules/@tap/wow",
-    "foo/zap/node_modules/no/node_modules/@tap/wow"
+    "foo/zap/node_modules/no/node_modules/@tap/wow",
   ]);
 
   expect(ret.length).toBe(1);
@@ -51,7 +51,7 @@ it("correctly find duplicated @ scoped modules", () => {
 it("handles duplicate modules", () => {
   const ret = findDuplicateModules([
     "foo/zap/node_modules/tap",
-    "foo/zap/node_modules/bar/node_modules/tap"
+    "foo/zap/node_modules/bar/node_modules/tap",
   ]);
 
   expect(ret.length).toBe(1);
@@ -64,7 +64,7 @@ it("handles multiple duplicate modules", () => {
     "foo/zap/node_modules/tap",
     "foo/zap/node_modules/bar/node_modules/tap",
     "foo/zap/node_modules/lap",
-    "foo/zap/node_modules/wow/node_modules/lap"
+    "foo/zap/node_modules/wow/node_modules/lap",
   ]);
 
   expect(ret.length).toBe(2);
@@ -73,4 +73,33 @@ it("handles multiple duplicate modules", () => {
 
   expect(ret[1].key).toBe("lap");
   expect(ret[1].value.sort()).toEqual(["<PROJECT ROOT>", "wow"]);
+});
+
+it("correctly splits deeply nested scoped packages", () => {
+  const ret = splitBySemanticModulePath(
+    "node_modules/lodash/node_modules/@babel/core/node_modules/@babel/helper"
+  );
+  expect(ret).toEqual([
+    "node_modules",
+    "lodash",
+    "node_modules",
+    "@babel/core",
+    "node_modules",
+    "@babel/helper",
+  ]);
+});
+
+it("detects duplicates in deeply nested scoped packages", () => {
+  const ret = findDuplicateModules([
+    "node_modules/lodash/node_modules/@babel/core/node_modules/@babel/helper",
+    "node_modules/@babel/helper",
+  ]);
+
+  expect(ret.length).toBe(1);
+  expect(ret[0].key).toBe("@babel/helper");
+});
+
+it("handles scoped package at end of path without sub-package", () => {
+  const ret = splitBySemanticModulePath("foo/node_modules/@scope");
+  expect(ret).toEqual(["foo", "node_modules", "@scope"]);
 });

@@ -94,15 +94,15 @@ function getRollups(files: { [fileName: string]: BundledFile }) {
     const index = key.lastIndexOf("/");
     const fileName = key.slice(index + 1).split(/\./g);
 
+    const parentIndex = key.indexOf("/");
+    let parent = EMPTY_NAME;
+
+    if (parentIndex !== -1) {
+      parent = key.slice(0, parentIndex);
+    }
+
     if (fileName.length > 1) {
       const extension = fileName[fileName.length - 1].split("?")[0];
-
-      const parentIndex = key.indexOf("/");
-      let parent = EMPTY_NAME;
-
-      if (parentIndex !== -1) {
-        parent = key.slice(0, parentIndex);
-      }
 
       if (summary.fileTypes[extension]) {
         summary.fileTypes[extension].totalBytes += files[key].totalBytes;
@@ -112,15 +112,16 @@ function getRollups(files: { [fileName: string]: BundledFile }) {
           totalBytes: files[key].totalBytes,
         };
       }
+    }
 
-      if (summary.directories[parent]) {
-        summary.directories[parent].totalBytes += files[key].totalBytes;
-      } else {
-        summary.directories[parent] = {
-          name: parent,
-          totalBytes: files[key].totalBytes,
-        };
-      }
+    // Always count in directories, regardless of whether file has an extension
+    if (summary.directories[parent]) {
+      summary.directories[parent].totalBytes += files[key].totalBytes;
+    } else {
+      summary.directories[parent] = {
+        name: parent,
+        totalBytes: files[key].totalBytes,
+      };
     }
   });
 

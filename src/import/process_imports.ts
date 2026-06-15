@@ -89,13 +89,9 @@ export function buildImportErrorReport(
       importError = "";
     }
 
-    reportUri.addError(
-      Object.keys(files.sourceMapFiles.map((f) => f.name)).join(","),
-      processed.sourceMapProcessError
-    );
-    importError += `${Object.keys(files.sourceMapFiles.map((f) => f.name)).join(
-      ","
-    )}: ${processed.sourceMapProcessError}`;
+    const fileNames = files.sourceMapFiles.map((f) => f.name).join(",");
+    reportUri.addError(fileNames, processed.sourceMapProcessError);
+    importError += `${fileNames}: ${processed.sourceMapProcessError}`;
   }
 
   return {
