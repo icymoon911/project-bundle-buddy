@@ -1,0 +1,11 @@
+data/*
+.DS_STORE
+node_modules
+/*.js
+output_large.json
+src/bundle/prototype/*
+src/bundle/prototype-*/*
+build/*
+deploy/*
+samples/*
+yarn-error*
