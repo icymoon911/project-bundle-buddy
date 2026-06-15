@@ -8,10 +8,15 @@ import {
   ImportState,
   ImportTypes,
   EsBuildMetadata,
+  ViteMetadata,
   ProcessedBundle,
 } from "../types";
 import { storeResolveState } from "../routes";
 import { toEdges, toProcessedBundles } from "./esbuild";
+import {
+  toEdges as viteToEdges,
+  toProcessedBundles as viteToProcessedBundles,
+} from "./vite";
 import { mergeProcessedBundles } from "./process_sourcemaps";
 import { cleanGraph } from "./graph_process";
 import { statsToGraph } from "./stats_to_graph";
@@ -131,8 +136,8 @@ class Import extends Component<ImportProps, ImportState> {
     graphFile: File | undefined,
     importType: ImportTypes
   ) {
-    // ESBuild does not need sourcemap files.
-    if (importType === ImportTypes.ESBUILD) {
+    // ESBuild and Vite do not need sourcemap files.
+    if (importType === ImportTypes.ESBUILD || importType === ImportTypes.VITE) {
       return graphFile != null;
     }
 
@@ -150,6 +155,25 @@ class Import extends Component<ImportProps, ImportState> {
         graphEdges: toEdges(graphContents),
         processedSourceMap: mergeProcessedBundles(
           toProcessedBundles(graphContents)
+        ),
+      };
+
+      this.props.history.push(
+        `/${this.props.importType}/resolve`,
+        storeResolveState(state)
+      );
+      return;
+    }
+
+    if (importType === ImportTypes.VITE && this.state.graphFile != null) {
+      const graphContents = JSON.parse(
+        await readFileAsText(this.state.graphFile)
+      ) as ViteMetadata;
+
+      const state: ImportResolveState = {
+        graphEdges: cleanGraph(viteToEdges(graphContents)),
+        processedSourceMap: mergeProcessedBundles(
+          viteToProcessedBundles(graphContents)
         ),
       };
 
@@ -211,7 +235,7 @@ class Import extends Component<ImportProps, ImportState> {
   }
 
   disableSourceMapInput(importType: ImportTypes) {
-    if (importType === ImportTypes.ESBUILD) {
+    if (importType === ImportTypes.ESBUILD || importType === ImportTypes.VITE) {
       return true;
     }
 
@@ -441,6 +465,55 @@ buildEnd() {
             className="copy-button"
             aria-label="Copy sourcemap snippet to clipboard"
           />
+        </div>
+      );
+    } else if (type === ImportTypes.VITE) {
+      instructions = (
+        <div>
+          <p>
+            Add the <code>rollup-plugin-visualizer</code> plugin to your{" "}
+            <code>vite.config.ts</code> to emit a metadata JSON during build:
+          </p>
+          <code>
+            <pre>
+              {`// vite.config.ts
+import { defineConfig } from 'vite';
+import { visualizer } from 'rollup-plugin-visualizer';
+
+export default defineConfig({
+  plugins: [
+    visualizer({
+      emitFile: true,
+      filename: 'vite-bundle.json',
+      template: 'raw-data',
+    }),
+  ],
+});`}
+            </pre>
+            <button
+              onClick={() =>
+                toClipboard(
+                  `import { visualizer } from 'rollup-plugin-visualizer';\n\nvisualizer({ emitFile: true, filename: 'vite-bundle.json', template: 'raw-data' })`
+                )
+              }
+              className="copy-button"
+              aria-label="Copy vite config snippet to clipboard"
+            />
+          </code>
+          <p>Then run the Vite build command:</p>
+          <code>
+            <pre>npx vite build</pre>
+          </code>
+          <button
+            onClick={() => toClipboard("npx vite build")}
+            className="copy-button"
+            aria-label="Copy vite build command to clipboard"
+          />
+          <p>
+            The file <code>vite-bundle.json</code> will be written to your{" "}
+            <code>dist/</code> folder (or wherever your build output is
+            configured). Upload that file above.
+          </p>
         </div>
       );
     }

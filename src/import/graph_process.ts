@@ -8,8 +8,11 @@ const prefixStrips = [
   "commonjs-proxy:/",
   // Rollup specific prefix added to add commonjs external nodes.
   "\u0000commonjs-external:",
-  // More rollup magic prefixing.
-  "\u0000"
+  // Vite internal virtual modules (e.g. \0vite/modulepreload-polyfill).
+  "\u0000vite/",
+  // More rollup magic prefixing (also used by Vite for virtual modules
+  // such as \0plugin-vue:export-helper).
+  "\u0000",
 ];
 
 const ignoreNodes = new Set(
@@ -17,12 +20,12 @@ const ignoreNodes = new Set(
     // Rollup specific magic module.
     "\u0000commonjsHelpers",
     "commonjsHelpers",
-    "babelHelpers"
+    "babelHelpers",
   ].concat(builtins)
 );
 
 function removedIgnoredFiles(nodes: string[]) {
-  return nodes.filter(v => !ignoreNodes.has(v));
+  return nodes.filter((v) => !ignoreNodes.has(v));
 }
 
 function getAllGraphFiles(graph: GraphEdges): string[] {
@@ -35,6 +38,18 @@ function getAllGraphFiles(graph: GraphEdges): string[] {
   }
 
   return Array.from(ret);
+}
+
+/**
+ * Strip leading relative path segments (../) that Vite and other tools
+ * sometimes emit in their output paths. For example
+ * ../../src/main.ts becomes src/main.ts.
+ */
+function stripRelativePrefix(path: string): string {
+  while (path.startsWith("../")) {
+    path = path.slice(3);
+  }
+  return path;
 }
 
 export function cleanGraph(graph: GraphEdges): GraphEdges {
@@ -52,6 +67,9 @@ export function cleanGraph(graph: GraphEdges): GraphEdges {
           }
         }
       }
+
+      // Strip leading ../ segments commonly produced by Vite.
+      node[key] = stripRelativePrefix(node[key]!);
     }
   }
 

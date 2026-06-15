@@ -146,6 +146,19 @@ class ImportSelector extends Component<{ history: ImportHistory }> {
                 <span>ESBuild</span>
               </button>
             </Link>
+            <Link
+              to="/vite"
+              aria-label="vite project import"
+              className="no-link-underline "
+            >
+              <button
+                aria-hidden
+                tabIndex={-1}
+                className={`type-button project-import vite-import`}
+              >
+                <span>Vite</span>
+              </button>
+            </Link>
           </div>
 
           <button tabIndex={-1}>
